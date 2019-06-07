@@ -1,0 +1,229 @@
+/*Servidor*/
+
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <netinet/in.h>
+#include <netinet/ip.h> /* superset of previous */
+#include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <string.h>
+
+int main(){
+	FILE *archivo;
+	struct sockaddr_in servidor,cliente;
+	struct timeval start, end;
+	unsigned char Peticion[109],Datos[516],ACK[4],Error[30],msj[511],nombre[100],tipo[9];
+	unsigned char PLect[2]={0x00,0x01};
+	unsigned char PEscr[2]={0x00,0x02};
+	unsigned char PDato[2]={0x00,0x03};
+	unsigned char PACKM[2]={0x00,0x04};
+	unsigned char PErro[2]={0x00,0x05};
+	unsigned char num[2]={0x00,0x00};
+	unsigned char modo[]="octet";
+	unsigned char c;
+	int udp_socket,lbind,tam,tama,res,rec,salida=0,erro=0,tamtrama=0,con,arc=0; //Declaracion de Variables
+	long mtime=0, seconds, useconds;
+	udp_socket = socket(AF_INET, SOCK_DGRAM, 0); //Abrir Puerto
+	if (udp_socket == -1)
+	{ //Si no se puede abrir el puerto
+		perror("\nError al abrir el socket");
+		exit(1);
+	}
+	else
+	{ //Si pudo abrir el puerto
+		perror("\nExito al abrir el socket");
+		memset(&servidor,0x00,sizeof(servidor)); //Borrar Contenido de Estructura
+		servidor.sin_family=AF_INET; /* address family: AF_INET */
+        servidor.sin_port=htons(69);   /* port in network byte order */
+        servidor.sin_addr.s_addr=inet_addr("8.12.0.240"); /*Internet Address Aqui tecnicamente va la direccion de la computadora que envia pero no es necesario*/
+        lbind=bind(udp_socket,(struct sockaddr *)&servidor,sizeof(servidor));
+		if(lbind==-1)
+		{
+			perror("\nError en el bind");
+			exit(1);
+		}
+		else
+		{
+			perror("\nExito en el bind");
+			while(salida==0){
+				memset(tipo,0x00,9);
+				memset(Peticion,0x00,9);
+				memset(num,0x00,2);
+				tam=sizeof(cliente);
+				rec=recvfrom(udp_socket,Peticion,109,0,(struct sockaddr *)&cliente,&tam); //recibe mensaje
+				
+				
+				
+				
+				
+				
+				
+				
+				if(Peticion[0]==PEscr[0] && Peticion [1]==PEscr[1])
+				{
+					memset(nombre,0x00,100);
+					for(con=2;con<102;con++)
+					{
+						if(Peticion[con]==0x00)
+						{
+							break;
+						}
+						nombre[con-2]=Peticion[con];
+					}
+					archivo=fopen(nombre,"wb");
+					memset(msj,0x00,512);
+					memcpy(ACK+0,PACKM,2);
+					memcpy(ACK+2,num,2);
+					tama=sendto(udp_socket,ACK,4,0,(struct sockaddr *)&cliente,sizeof(cliente));
+					do
+					{
+						gettimeofday(&start, NULL);
+						while(mtime<2000)
+						{
+							tam=sizeof(cliente);
+							rec=recvfrom(udp_socket,Datos,516,MSG_DONTWAIT,(struct sockaddr *)&cliente,&tam); //recibe mensaje
+							if(rec!=-1)
+							{
+								break;
+							}
+							gettimeofday(&end, NULL);
+							seconds  = end.tv_sec  - start.tv_sec;
+							useconds = end.tv_usec - start.tv_usec;
+							mtime = ((seconds) * 1000 + useconds/1000.0) + 0.5;
+						}
+						if(Datos[0]==PDato[0] && Datos[1]==PDato[1]   && mtime<2000)
+						{ 
+							memcpy(msj,Datos+4,rec);
+							fwrite(msj,1,rec-4,archivo);
+							memset(msj,0x00,514);
+
+							printf("ACK: %02X %02X\n",num[0], num[1]);
+							memcpy(ACK+0,PACKM,2);
+							memcpy(ACK+2,num,2);
+							if(num[1]==255)
+							{
+								num[0]++;
+								num[1]=0x00;
+							}
+							else if(num[0]==255 && num[1]==255)
+							{
+								num[0]=0x00;
+								num[1]=0x00;
+							}
+							else
+							{
+								num[1]++;
+							}
+							tama=sendto(udp_socket,ACK,4,0,(struct sockaddr *)&cliente,sizeof(cliente));
+							memset(ACK,0x00,4);
+						}
+						else
+						{
+							erro=1;
+						}
+    				}while(rec==516);
+					fclose(archivo);
+				}
+				
+				
+				
+				
+				
+				
+				
+				
+				
+				else if(Peticion[0]==PLect[0] && Peticion[1]==PLect[1])
+				{
+					memset(nombre,0x00,100);
+					for(con=2;con<102;con++)
+					{
+						if(Peticion[con]==0x00)
+						{
+							break;
+						}
+						nombre[con-2]=Peticion[con];
+					}
+					archivo=fopen(nombre,"rb");
+					if(archivo==NULL)
+					{
+						perror("Archivo no encontrado\n");
+						exit(1);
+					}
+					num[1]++;
+					do
+					{
+
+						memset(msj,0x00,512);
+						arc=fread(msj,1,512,archivo);
+						memcpy(Datos+0,PDato,2);
+						memcpy(Datos+2,num,2);
+						memcpy(Datos+4,msj,arc);
+						tama=sendto(udp_socket,Datos,4+arc,0,(struct sockaddr *)&cliente,sizeof(cliente));
+						
+						
+						memset(msj,0x00,512);
+						memset(Datos,0x00,516);
+						gettimeofday(&start, NULL);
+						while(mtime<200000)
+						{
+							tam=sizeof(cliente);
+							rec=recvfrom(udp_socket,ACK,4,MSG_DONTWAIT,(struct sockaddr *)&cliente,&tam); //recibe mensaje
+							if(rec!=-1)
+							{
+								break;
+							}
+							gettimeofday(&end, NULL);
+							seconds  = end.tv_sec  - start.tv_sec;
+							useconds = end.tv_usec - start.tv_usec;
+							mtime = ((seconds) * 100000 + useconds/1000.0) + 0.5;
+						}
+
+						if(mtime==200000 && rec==-1)
+						{
+							printf("Error de tiempo\n");
+							exit(1);
+						}else
+						{
+							if(ACK[0]==PACKM[0] && ACK[1]==PACKM[1] && num[0]==ACK[2] && num[1]==ACK[3])
+							{
+								printf("ACK bueno %02x %02x\n",num[0],num[1]);
+							}
+							else
+							{
+								printf("Esperaba %02x %02x\n",num[0],num[1]);
+								printf("Error de ACK: %02x %02x %02x %02x\n",ACK[0],ACK[1],ACK[2],ACK[3]);
+								exit(1);
+							}
+						}
+						if(num[1]==255)
+						{
+							num[0]++;
+							num[1]=0x00;
+						}
+						else if(num[0]==255 && num[1]==255)
+						{
+							erro=1;
+						}
+						else
+						{
+							num[1]++;
+						}
+					}while(arc==512);
+					fclose(archivo);
+				}
+				else
+				{
+					printf("\nError tipo de solicitud no valida.\n");
+				}
+				salida=1;//preguntar salida
+			}
+		}
+	}
+	printf("\nComunicacion Terminada.\n");
+	close(udp_socket); //Cerrar puerto IMPORTANTE
+	return 1;
+}
