@@ -1,0 +1,118 @@
+/*Practica 2, Servidor DNS*/
+
+#include <arpa/inet.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <sys/time.h>
+#include <netinet/in.h>
+#include <netinet/ip.h> /* superset of previous */
+#include <stdlib.h>
+#include <stdio.h>
+#include <unistd.h>
+#include <string.h>
+
+//Prototipos
+void NombreP(unsigned char *Npet);
+
+int main(){
+	struct sockaddr_in servidor,cliente;
+	struct timeval start, end;
+	//Encabezado DNS
+	unsigned char idtrans[2];
+	unsigned char tipmos[2][10]={"Solicitud","Respuesta"};
+	unsigned char Cop[3][31]={"Solicitud","Solicitud Inversa","Solicitud de Estado de Servidor"};
+	unsigned char resaut[2][3]={"No","Si"};
+	unsigned char trunc[2][3]={"No","Si"};
+	unsigned char recur[2][3]={"No","Si"};
+	unsigned char Reservado[3]={0x00,0x00,0x00};
+	unsigned char Cret[3][6]={"Exito","","Error"};
+	unsigned char CPet[2]={0x00,0x01};
+	unsigned char Npet[100];
+	unsigned char Tpet[2];
+	unsigned char Cpeti[2];
+	unsigned char Enca[22],Peti[4],CabeceraD[512],Resp[512];
+	unsigned char c,SR,RA,Tr,Dr,Rd;
+	int udp_socket,lbind,salida=0,con,top,tam,tama,rec,domd; //Declaracion de Variables
+	long mtime=0, seconds, useconds;
+	udp_socket = socket(AF_INET, SOCK_DGRAM, 0); //Abrir Puerto
+	if (udp_socket == -1){ //Si no se puede abrir el puerto
+		perror("\nError al abrir el socket");
+		exit(1);
+	}else{ //Si pudo abrir el puerto
+		memset(&servidor,0x00,sizeof(servidor)); //Borrar Contenido de Estructura
+		servidor.sin_family=AF_INET; /* address family: AF_INET */
+        servidor.sin_port=htons(8000);   /* port in network byte order */
+        servidor.sin_addr.s_addr=inet_addr("8.12.0.240"); /*Internet Address Aqui tecnicamente va la direccion de la computadora que envia pero no es necesario*/
+        lbind=bind(udp_socket,(struct sockaddr *)&servidor,sizeof(servidor));
+		if(lbind==-1){
+			perror("\nError en el bind");
+			exit(1);
+		}else{
+			perror("\nExito en el bind");
+			while(salida==0){
+				memset(Resp,0x00,512);
+				tam=sizeof(cliente);
+				rec=recvfrom(udp_socket,CabeceraD,512,0,(struct sockaddr *)&cliente,&tam); //recibe mensaje
+				printf("\nSolicitud DNS:\n");
+				for(con=0;con<rec;con++){
+					printf("%02x ",CabeceraD[con]);
+				}
+				printf("\nID de Transaccion: %02x %02x.",CabeceraD[0],CabeceraD[1]);
+				printf("\nTipo de DNS: %s.",tipmos[CabeceraD[2]&128]);
+				CabeceraD[2]=CabeceraD[2]|128;
+				printf("\nSolicitud: %s.",Cop[(CabeceraD[2]&24)>>3]);
+				printf("\nRespuesta de Autoridad: %s.",resaut[(CabeceraD[2]&4)>>2]);
+				CabeceraD[2]=CabeceraD[2]|4;
+				printf("\nTruncado: %s.",trunc[(CabeceraD[2]&2)>>1]);
+				printf("\nDesea Recursion?: %s.",recur[(CabeceraD[2]&1)]);
+				printf("\nRecursion Disponible: %s.",recur[(CabeceraD[3]&128)>>7]);
+				CabeceraD[3]=CabeceraD[3]|128;
+				printf("\nCodigo de Retorno: %s.",Cret[(CabeceraD[3]&15)]);
+				printf("\nPeticiones: %d.",(CabeceraD[4]<<8)+CabeceraD[5]);
+				printf("\nRR de Respuestas: %d.",(CabeceraD[6]<<8)+CabeceraD[7]);
+				printf("\nRR de Autoridad: %d.",(CabeceraD[8]<<8)+CabeceraD[9]);
+				printf("\nRR Adicionales: %d.",(CabeceraD[10]<<8)+CabeceraD[11]);
+				printf("\nNombre del Dominio:");
+				for(top=12;top<rec-4;top++){
+					if((CabeceraD[top]>=48 && CabeceraD[top]<=57) || (CabeceraD[top]>=65 && CabeceraD[top]<=90) || (CabeceraD[top]>=97 && CabeceraD[top]<=122) || (CabeceraD[top]>=164 && CabeceraD[top]<=165)){
+						printf("%c",CabeceraD[top]);
+					}else{
+						printf(".");
+					}
+				}
+				tam=sendto(udp_socket,Resp,rec,0,(struct sockaddr *)&cliente,sizeof(cliente)); //Manda mensaje
+				salida=1;
+			}
+		}
+	}
+	printf("\nComunicacion Terminada.\n");
+	close(udp_socket); //Cerrar puerto IMPORTANTE
+	return 1;
+}
+
+void NombreP(unsigned char *Npet){
+	int cont,tam,nom=0,term=0;
+	unsigned char pun=0x00,num=0x00;
+	tam=strlen(Npet);
+	for(cont=tam;cont>nom;cont--){
+		Npet[cont+1]=Npet[cont];
+	}
+	do{
+		for(cont=nom+1;cont<=tam+1;cont++){
+			if(Npet[cont]=='.'){
+				Npet[nom]=pun;
+				nom=cont;
+				break;
+			}else if(cont==tam+1){
+				Npet[nom]=pun;
+				nom=cont;
+				break;
+			}
+			pun++;
+		}
+		pun=0x00;
+		if(nom==tam+1){
+			term++;
+		}
+	}while(term==0);
+}
